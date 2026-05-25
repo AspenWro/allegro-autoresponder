@@ -18,6 +18,8 @@ response = requests.post(
 
 token_data = response.json()
 
+print(token_data)
+
 access_token = token_data["access_token"]
 
 print("Pobrano access token")
