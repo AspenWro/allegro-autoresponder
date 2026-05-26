@@ -156,4 +156,4 @@ for thread in threads[:10]:
     processed_threads.add(thread_id)
 
 # 💾 ZAPIS STANU
-save_processed(processed_threads)
+save_processed(processed_threads) 
