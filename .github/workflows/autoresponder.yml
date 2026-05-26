@@ -23,7 +23,10 @@ jobs:
 
       - name: Uruchomienie bota
         env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+  CLIENT_ID: ${{ secrets.CLIENT_ID }}
+  CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+  REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+  GH_PAT: ${{ secrets.GH_PAT }}
+  REPO_NAME: ${{ secrets.REPO_NAME }}
+  ASPENWRO_NAME: ${{ secrets.ASPENWRO_NAME }}
         run: python main.py
