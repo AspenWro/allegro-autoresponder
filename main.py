@@ -6,7 +6,11 @@ CLIENT_ID = os.environ["CLIENT_ID"]
 CLIENT_SECRET = os.environ["CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["REFRESH_TOKEN"]
 
-# Pobranie access tokena
+GH_PAT = os.environ["GH_PAT"]
+REPO_NAME = os.environ["REPO_NAME"]
+GITHUB_USERNAME = os.environ["ASPENWRO_NAME"]
+
+# Pobranie nowych tokenów
 response = requests.post(
     "https://allegro.pl/auth/oauth/token",
     auth=HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET),
@@ -21,15 +25,30 @@ token_data = response.json()
 print(token_data)
 
 access_token = token_data["access_token"]
+new_refresh_token = token_data["refresh_token"]
 
-print("Access token OK")
+print("Nowy access token OK")
+
+# Aktualizacja GitHub Secret
+github_response = requests.put(
+    f"https://api.github.com/repos/{GITHUB_USERNAME}/{REPO_NAME}/actions/secrets/REFRESH_TOKEN",
+    headers={
+        "Authorization": f"Bearer {GH_PAT}",
+        "Accept": "application/vnd.github+json"
+    },
+    json={
+        "encrypted_value": new_refresh_token,
+        "key_id": "temporary"
+    }
+)
+
+print("Próba aktualizacji refresh token")
 
 headers = {
     "Authorization": f"Bearer {access_token}",
     "Accept": "application/vnd.allegro.public.v1+json"
 }
 
-# Pobranie listy rozmów
 threads_response = requests.get(
     "https://api.allegro.pl/messaging/threads",
     headers=headers
@@ -39,32 +58,7 @@ threads_data = threads_response.json()
 
 print("Pobrano rozmowy")
 
-# Wyświetlenie rozmów i ostatnich wiadomości
-for thread in threads_data.get("threads", [])[:5]:
+for thread in threads_data.get("threads", [])[:3]:
 
-    thread_id = thread.get("id")
-
-    print("------------------")
-    print("ID rozmowy:", thread_id)
-
-    messages_response = requests.get(
-        f"https://api.allegro.pl/messaging/threads/{thread_id}/messages",
-        headers=headers
-    )
-
-    messages_data = messages_response.json()
-
-    messages = messages_data.get("messages", [])
-
-    if messages:
-
-        last_message = messages[-1]
-
-        text = last_message.get("text")
-        author = last_message.get("author", {}).get("login")
-
-        print("Autor:", author)
-        print("Treść:", text)
-
-    else:
-        print("Brak wiadomości")
+    print("----------------")
+    print(thread.get("id"))
