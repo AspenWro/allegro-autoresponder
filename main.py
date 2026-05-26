@@ -6,7 +6,7 @@ CLIENT_ID = os.environ["CLIENT_ID"]
 CLIENT_SECRET = os.environ["CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["REFRESH_TOKEN"]
 
-# Pobranie nowego access tokena
+# Pobranie access tokena
 response = requests.post(
     "https://allegro.pl/auth/oauth/token",
     auth=HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET),
@@ -18,22 +18,31 @@ response = requests.post(
 
 token_data = response.json()
 
-print(token_data)
-
 access_token = token_data["access_token"]
 
-print("Pobrano access token")
+print("Access token OK")
 
-# Nagłówki do API Allegro
 headers = {
     "Authorization": f"Bearer {access_token}",
     "Accept": "application/vnd.allegro.public.v1+json"
 }
 
-# Pobranie wiadomości
-messages_response = requests.get(
+# Pobranie listy rozmów
+threads_response = requests.get(
     "https://api.allegro.pl/messaging/threads",
     headers=headers
 )
 
-print(messages_response.json())
+threads_data = threads_response.json()
+
+print("Pobrano rozmowy")
+
+# Wyświetlenie kilku podstawowych danych
+for thread in threads_data.get("threads", [])[:5]:
+
+    thread_id = thread.get("id")
+    topic = thread.get("topic")
+
+    print("------------------")
+    print("ID rozmowy:", thread_id)
+    print("Temat:", topic)
