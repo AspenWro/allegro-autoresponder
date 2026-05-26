@@ -39,12 +39,32 @@ threads_data = threads_response.json()
 
 print("Pobrano rozmowy")
 
-# Wyświetlenie kilku podstawowych danych
+# Wyświetlenie rozmów i ostatnich wiadomości
 for thread in threads_data.get("threads", [])[:5]:
 
     thread_id = thread.get("id")
-    topic = thread.get("topic")
 
     print("------------------")
     print("ID rozmowy:", thread_id)
-    print("Temat:", topic)
+
+    messages_response = requests.get(
+        f"https://api.allegro.pl/messaging/threads/{thread_id}/messages",
+        headers=headers
+    )
+
+    messages_data = messages_response.json()
+
+    messages = messages_data.get("messages", [])
+
+    if messages:
+
+        last_message = messages[-1]
+
+        text = last_message.get("text")
+        author = last_message.get("author", {}).get("login")
+
+        print("Autor:", author)
+        print("Treść:", text)
+
+    else:
+        print("Brak wiadomości")
