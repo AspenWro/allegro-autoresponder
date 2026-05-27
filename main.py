@@ -1,120 +1,140 @@
-import os
 import requests
-from requests.auth import HTTPBasicAuth
+import os
+import json
+from github import Github
 
-# =========================
-# 🔐 SECRETS
-# =========================
 CLIENT_ID = os.environ["CLIENT_ID"]
 CLIENT_SECRET = os.environ["CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["REFRESH_TOKEN"]
 
-# =========================
-# 🧠 STATE (PAMIĘĆ BOTA)
-# =========================
-STATE_FILE = "processed_threads.txt"
+GH_PAT = os.environ["GH_PAT"]
+GH_REPO = os.environ["GH_REPO"]
 
-def load_processed():
-    if not os.path.exists(STATE_FILE):
+PROCESSED_FILE = "processed_threads.txt"
+
+
+def get_access_token():
+    url = "https://allegro.pl/auth/oauth/token"
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": REFRESH_TOKEN
+    }
+
+    response = requests.post(
+        url,
+        headers=headers,
+        data=data,
+        auth=(CLIENT_ID, CLIENT_SECRET)
+    )
+
+    token_data = response.json()
+
+    if "access_token" not in token_data:
+        print("❌ Błąd tokena:", token_data)
+        raise Exception("Nie udało się pobrać access_token")
+
+    print("✅ Access token OK")
+
+    new_refresh_token = token_data["refresh_token"]
+    update_github_secret(new_refresh_token)
+
+    return token_data["access_token"]
+
+
+def update_github_secret(new_token):
+    try:
+        g = Github(GH_PAT)
+
+        repo = g.get_repo(GH_REPO)
+
+        print("🔄 Aktualizacja refresh tokena...")
+
+        repo.create_secret(
+            "REFRESH_TOKEN",
+            new_token
+        )
+
+        print("✅ Refresh token zaktualizowany")
+
+    except Exception as e:
+        print("⚠️ Nie udało się zaktualizować tokena:", e)
+
+
+def load_processed_threads():
+    if not os.path.exists(PROCESSED_FILE):
         return set()
 
-    with open(STATE_FILE, "r") as f:
+    with open(PROCESSED_FILE, "r") as f:
         return set(line.strip() for line in f.readlines())
 
 
-def save_processed(processed):
-    with open(STATE_FILE, "w") as f:
-        for item in processed:
-            f.write(item + "\n")
+def save_processed_thread(thread_id):
+    with open(PROCESSED_FILE, "a") as f:
+        f.write(thread_id + "\n")
 
-processed_threads = load_processed()
 
-# =========================
-# 🔑 TOKEN
-# =========================
-def get_access_token():
-    response = requests.post(
-        "https://allegro.pl/auth/oauth/token",
-        auth=HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET),
-        data={
-            "grant_type": "refresh_token",
-            "refresh_token": REFRESH_TOKEN
-        }
-    )
+def push_processed_file():
+    try:
+        g = Github(GH_PAT)
+        repo = g.get_repo(GH_REPO)
 
-    data = response.json()
+        with open(PROCESSED_FILE, "r") as f:
+            content = f.read()
 
-    if "access_token" not in data:
-        print("❌ Błąd tokena:", data)
-        raise Exception("Nie udało się pobrać access_token")
+        path = PROCESSED_FILE
 
-    return data["access_token"]
+        try:
+            contents = repo.get_contents(path)
+
+            repo.update_file(
+                path,
+                "Aktualizacja processed threads",
+                content,
+                contents.sha
+            )
+
+        except:
+            repo.create_file(
+                path,
+                "Dodanie processed threads",
+                content
+            )
+
+        print("✅ processed_threads.txt zapisany do GitHub")
+
+    except Exception as e:
+        print("⚠️ Błąd zapisu processed_threads:", e)
+
 
 access_token = get_access_token()
-print("✅ Access token OK")
 
-# =========================
-# 🌐 HEADERS
-# =========================
 headers = {
     "Authorization": f"Bearer {access_token}",
     "Accept": "application/vnd.allegro.public.v1+json"
 }
 
-# =========================
-# 📨 ROZMOWY
-# =========================
-threads_response = requests.get(
+response = requests.get(
     "https://api.allegro.pl/messaging/threads",
     headers=headers
 )
 
-threads_data = threads_response.json()
-threads = threads_data.get("threads", [])
+threads = response.json()
 
-print(f"📨 Pobrano rozmowy: {len(threads)}")
+processed_threads = load_processed_threads()
 
-# =========================
-# 🧯 FILTR SYSTEMOWYCH
-# =========================
-def is_system_message(text: str) -> bool:
-    if not text:
-        return True
+print(f"📨 Pobrano rozmowy: {len(threads['threads'])}")
 
-    blockers = [
-        "wiadomość generowana automatycznie",
-        "dziękujemy za złożenie zamówienia",
-        "zamówienie dotyczy",
-        "prosimy nie odpowiadać",
-        "baselinker",
-    ]
+for thread in threads["threads"]:
 
-    lower = text.lower()
-    return any(b.lower() in lower for b in blockers)
+    thread_id = thread["id"]
 
-# =========================
-# 📬 ODPOWIEDŹ
-# =========================
-def send_reply(thread_id):
-    url = f"https://api.allegro.pl/messaging/threads/{thread_id}/messages"
-
-    payload = {
-        "text": "Dziękujemy za wiadomość 👍 Odpowiemy najszybciej jak to możliwe."
-    }
-
-    r = requests.post(url, headers=headers, json=payload)
-    print("📤 Odpowiedź status:", r.status_code)
-
-# =========================
-# 🔁 GŁÓWNA PĘTLA
-# =========================
-for thread in threads[:10]:
-
-    thread_id = thread.get("id")
-
-    # 🧠 ANTI-DUPLICATE
     if thread_id in processed_threads:
-        print("⏭️ Już obsłużone:", thread_id)
+        print(f"⏭️ Już obsłużone: {thread_id}")
         continue
 
     messages_response = requests.get(
@@ -122,38 +142,30 @@ for thread in threads[:10]:
         headers=headers
     )
 
-    messages_data = messages_response.json()
-    messages = messages_data.get("messages", [])
+    messages = messages_response.json()
 
-    if not messages:
+    if not messages["messages"]:
         continue
 
-    last_message = messages[-1]
+    last_message = messages["messages"][-1]
+
     text = last_message.get("text", "")
-    author = last_message.get("author", {}).get("login", "")
 
     print("\n--------------------")
     print("🧵 ID:", thread_id)
-    print("👤 Autor:", author)
-    print("💬:", text)
+    print("💬:", text[:300])
 
-    # 🧯 SYSTEM FILTER
-    if is_system_message(text):
+    if (
+        "zamówienie" in text.lower()
+        or "dziękujemy za złożenie zamówienia" in text.lower()
+        or "wiadomość generowana automatycznie" in text.lower()
+    ):
         print("⛔ Pominięto (system / zamówienie)")
-        processed_threads.add(thread_id)
+        save_processed_thread(thread_id)
         continue
 
-    # 🧠 SELF CHECK
-    if author == "self":
-        print("⛔ Pominięto (własna wiadomość)")
-        processed_threads.add(thread_id)
-        continue
+    print("✅ NOWA WIADOMOŚĆ OD KLIENTA")
 
-    # 📬 ODPOWIEDŹ
-    send_reply(thread_id)
+    save_processed_thread(thread_id)
 
-    # 💾 ZAPIS DO PAMIĘCI
-    processed_threads.add(thread_id)
-
-# 💾 ZAPIS STANU
-save_processed(processed_threads) 
+push_processed_file()
