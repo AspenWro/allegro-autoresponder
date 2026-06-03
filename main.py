@@ -172,6 +172,25 @@ for thread in threads["threads"]:
         continue
 
     print("🧪 Wykryto wiadomość testową")
+
+    reply_url = f"https://api.allegro.pl/messaging/threads/{thread_id}/messages"
+
+    reply_payload = {
+        "text": "To jest odpowiedź testowa autorespondera Aspen."
+    }
+
+    reply_response = requests.post(
+        reply_url,
+        headers={
+            **headers,
+            "Content-Type": "application/json"
+        },
+        json=reply_payload
+    )
+
+    print("📤 Status odpowiedzi:", reply_response.status_code)
+    print(reply_response.text)
+
     save_processed_thread(thread_id)
 
 push_processed_file()
