@@ -166,6 +166,12 @@ for thread in threads["threads"]:
 
     print("✅ NOWA WIADOMOŚĆ OD KLIENTA")
 
+    if "#TEST" not in text:
+    print("🛡️ Tryb testowy - brak znacznika #TEST")
+    save_processed_thread(thread_id)
+    continue
+
+    print("🧪 Wykryto wiadomość testową")
     save_processed_thread(thread_id)
 
 push_processed_file()
