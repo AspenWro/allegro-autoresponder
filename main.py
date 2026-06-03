@@ -130,6 +130,9 @@ processed_threads = load_processed_threads()
 print(f"📨 Pobrano rozmowy: {len(threads['threads'])}")
 
 for thread in threads["threads"]:
+    print("THREAD:", thread["id"])
+
+for thread in threads["threads"]:
 
     thread_id = thread["id"]
 
