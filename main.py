@@ -112,6 +112,17 @@ def push_processed_file():
 
 
 access_token = get_access_token()
+me = requests.get(
+    "https://api.allegro.pl/me",
+    headers={
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/vnd.allegro.public.v1+json"
+    }
+)
+
+print("=== KONTO ALLEGRO ===")
+print(me.text)
+print("=====================")
 
 headers = {
     "Authorization": f"Bearer {access_token}",
