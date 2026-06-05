@@ -152,7 +152,7 @@ for thread in threads["threads"]:
 
     if thread_id in processed_threads:
         print(f"⏭️ Już obsłużone: {thread_id}")
-        continue
+        
 
     messages_response = requests.get(
         f"https://api.allegro.pl/messaging/threads/{thread_id}/messages",
