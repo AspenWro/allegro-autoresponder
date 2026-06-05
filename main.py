@@ -149,11 +149,13 @@ for thread in threads["threads"]:
     )
 
     messages = messages_response.json()
+    print("LICZBA WIADOMOŚCI:", len(messages.get("messages", [])))
 
     if not messages["messages"]:
         continue
 
     last_message = messages["messages"][-1]
+    print("NADAWCA:", last_message.get("author", {}))
 
     text = last_message.get("text", "")
 
