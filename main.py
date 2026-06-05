@@ -159,6 +159,7 @@ for thread in threads["threads"]:
 
     print("\n--------------------")
     print("🧵 ID:", thread_id)
+    print("👤 Login:", thread["interlocutor"]["login"])
     print("💬:", text[:300])
 
     if (
