@@ -119,7 +119,7 @@ headers = {
 }
 
 response = requests.get(
-    "https://api.allegro.pl/messaging/threads",
+    "https://api.allegro.pl/messaging/threads?limit=100",
     headers=headers
 )
 print("=== THREADS API RESPONSE ===")
