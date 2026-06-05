@@ -122,6 +122,9 @@ response = requests.get(
     "https://api.allegro.pl/messaging/threads",
     headers=headers
 )
+print("=== THREADS API RESPONSE ===")
+print(response.text)
+print("=== KONIEC RESPONSE ===")
 
 threads = response.json()
 
