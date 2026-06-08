@@ -1,6 +1,5 @@
 import requests
 import os
-import json
 from github import Github
 
 CLIENT_ID = os.environ["CLIENT_ID"]
@@ -16,19 +15,15 @@ PROCESSED_FILE = "processed_threads.txt"
 def get_access_token():
     url = "https://allegro.pl/auth/oauth/token"
 
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-
-    data = {
-        "grant_type": "refresh_token",
-        "refresh_token": REFRESH_TOKEN
-    }
-
     response = requests.post(
         url,
-        headers=headers,
-        data=data,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": REFRESH_TOKEN
+        },
         auth=(CLIENT_ID, CLIENT_SECRET)
     )
 
@@ -40,8 +35,11 @@ def get_access_token():
 
     print("✅ Access token OK")
 
-    new_refresh_token = token_data["refresh_token"]
-    update_github_secret(new_refresh_token)
+    try:
+        new_refresh_token = token_data["refresh_token"]
+        update_github_secret(new_refresh_token)
+    except Exception as e:
+        print("⚠️ Nie udało się odświeżyć refresh tokena:", e)
 
     return token_data["access_token"]
 
@@ -49,7 +47,6 @@ def get_access_token():
 def update_github_secret(new_token):
     try:
         g = Github(GH_PAT)
-
         repo = g.get_repo(GH_REPO)
 
         print("🔄 Aktualizacja refresh tokena...")
@@ -62,7 +59,7 @@ def update_github_secret(new_token):
         print("✅ Refresh token zaktualizowany")
 
     except Exception as e:
-        print("⚠️ Nie udało się zaktualizować tokena:", e)
+        print("⚠️ Błąd aktualizacji refresh tokena:", e)
 
 
 def load_processed_threads():
@@ -86,21 +83,19 @@ def push_processed_file():
         with open(PROCESSED_FILE, "r") as f:
             content = f.read()
 
-        path = PROCESSED_FILE
-
         try:
-            contents = repo.get_contents(path)
+            contents = repo.get_contents(PROCESSED_FILE)
 
             repo.update_file(
-                path,
+                PROCESSED_FILE,
                 "Aktualizacja processed threads",
                 content,
                 contents.sha
             )
 
-        except:
+        except Exception:
             repo.create_file(
-                path,
+                PROCESSED_FILE,
                 "Dodanie processed threads",
                 content
             )
@@ -112,17 +107,6 @@ def push_processed_file():
 
 
 access_token = get_access_token()
-me = requests.get(
-    "https://api.allegro.pl/me",
-    headers={
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/vnd.allegro.public.v1+json"
-    }
-)
-
-print("=== KONTO ALLEGRO ===")
-print(me.text)
-print("=====================")
 
 headers = {
     "Authorization": f"Bearer {access_token}",
@@ -133,18 +117,17 @@ response = requests.get(
     "https://api.allegro.pl/messaging/threads",
     headers=headers
 )
-print("=== THREADS API RESPONSE ===")
-print(response.text)
-print("=== KONIEC RESPONSE ===")
 
 threads = response.json()
+
+if "threads" not in threads:
+    print("❌ Błąd pobierania rozmów:")
+    print(threads)
+    raise Exception("Brak pola threads w odpowiedzi API")
 
 processed_threads = load_processed_threads()
 
 print(f"📨 Pobrano rozmowy: {len(threads['threads'])}")
-
-for thread in threads["threads"]:
-    print("THREAD:", thread["id"])
 
 for thread in threads["threads"]:
 
@@ -152,7 +135,7 @@ for thread in threads["threads"]:
 
     if thread_id in processed_threads:
         print(f"⏭️ Już obsłużone: {thread_id}")
-        
+        continue
 
     messages_response = requests.get(
         f"https://api.allegro.pl/messaging/threads/{thread_id}/messages",
@@ -160,21 +143,15 @@ for thread in threads["threads"]:
     )
 
     messages = messages_response.json()
-    print("LICZBA WIADOMOŚCI:", len(messages.get("messages", [])))
+
+    if "messages" not in messages:
+        print(f"⚠️ Brak wiadomości dla wątku {thread_id}")
+        continue
 
     if not messages["messages"]:
         continue
 
     last_message = messages["messages"][-1]
-    print("=== LAST MESSAGE ===")
-    print(json.dumps(last_message, indent=2, ensure_ascii=False))
-    print("====================")
-    print("NADAWCA:", last_message.get("author", {}))
-
-    for msg in messages["messages"]:
-    print("\n=== MESSAGE ===")
-    print(json.dumps(msg, indent=2, ensure_ascii=False))
-    print("===============\n")
 
     text = last_message.get("text", "")
 
@@ -203,17 +180,17 @@ for thread in threads["threads"]:
 
     reply_url = f"https://api.allegro.pl/messaging/threads/{thread_id}/messages"
 
-    reply_payload = {
-        "text": "To jest odpowiedź testowa autorespondera Aspen."
-    }
-
     reply_response = requests.post(
         reply_url,
         headers={
-            **headers,
-            "Content-Type": "application/json"
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/vnd.allegro.public.v1+json",
+            "Content-Type": "application/vnd.allegro.public.v1+json"
         },
-        json=reply_payload
+        json={
+            "text": "To jest odpowiedź testowa autorespondera Aspen.",
+            "attachments": []
+        }
     )
 
     print("📤 Status odpowiedzi:", reply_response.status_code)
