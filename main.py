@@ -171,6 +171,11 @@ for thread in threads["threads"]:
     print("====================")
     print("NADAWCA:", last_message.get("author", {}))
 
+    for msg in messages["messages"]:
+    print("\n=== MESSAGE ===")
+    print(json.dumps(msg, indent=2, ensure_ascii=False))
+    print("===============\n")
+
     text = last_message.get("text", "")
 
     print("\n--------------------")
