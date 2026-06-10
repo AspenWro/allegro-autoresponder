@@ -151,7 +151,7 @@ for thread in threads["threads"]:
     if not messages["messages"]:
         continue
 
-    print(messages["messages"][-1])
+    print(messages["messages"])
     
     last_message = messages["messages"][-1]
 
