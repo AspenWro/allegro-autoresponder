@@ -9,7 +9,7 @@ REFRESH_TOKEN = os.environ["REFRESH_TOKEN"]
 GH_PAT = os.environ["GH_PAT"]
 GH_REPO = os.environ["GH_REPO"]
 
-PROCESSED_FILE = "processed_threads.txt"
+PROCESSED_FILE = "processed_messages.txt"
 
 
 def get_access_token():
@@ -62,7 +62,7 @@ def update_github_secret(new_token):
         print("⚠️ Błąd aktualizacji refresh tokena:", e)
 
 
-def load_processed_threads():
+def load_processed_messages():
     if not os.path.exists(PROCESSED_FILE):
         return set()
 
@@ -70,9 +70,9 @@ def load_processed_threads():
         return set(line.strip() for line in f.readlines())
 
 
-def save_processed_thread(thread_id):
+def save_processed_message(message_id):
     with open(PROCESSED_FILE, "a") as f:
-        f.write(thread_id + "\n")
+        f.write(message_id + "\n")
 
 
 def push_processed_file():
@@ -88,7 +88,7 @@ def push_processed_file():
 
             repo.update_file(
                 PROCESSED_FILE,
-                "Aktualizacja processed threads",
+                "Aktualizacja processed messages",
                 content,
                 contents.sha
             )
@@ -96,14 +96,14 @@ def push_processed_file():
         except Exception:
             repo.create_file(
                 PROCESSED_FILE,
-                "Dodanie processed threads",
+                "Dodanie processed messages",
                 content
             )
 
-        print("✅ processed_threads.txt zapisany do GitHub")
+        print("✅ processed_messages.txt zapisany do GitHub")
 
     except Exception as e:
-        print("⚠️ Błąd zapisu processed_threads:", e)
+        print("⚠️ Błąd zapisu processed_messages:", e)
 
 
 access_token = get_access_token()
@@ -125,17 +125,13 @@ if "threads" not in threads:
     print(threads)
     raise Exception("Brak pola threads w odpowiedzi API")
 
-processed_threads = load_processed_threads()
+processed_messages = load_processed_messages()
 
 print(f"📨 Pobrano rozmowy: {len(threads['threads'])}")
 
 for thread in threads["threads"]:
 
     thread_id = thread["id"]
-
-    if thread_id in processed_threads:
-        print(f"⏭️ Już obsłużone: {thread_id}")
-        continue
 
     messages_response = requests.get(
         f"https://api.allegro.pl/messaging/threads/{thread_id}/messages",
@@ -151,14 +147,26 @@ for thread in threads["threads"]:
     if not messages["messages"]:
         continue
 
-    print(messages["messages"])
-    
-    last_message = messages["messages"][-1]
+    latest_message = messages["messages"][0]
 
-    text = last_message.get("text", "")
+    message_id = latest_message["id"]
+
+    if message_id in processed_messages:
+        print(f"⏭️ Wiadomość już obsłużona: {message_id}")
+        continue
+
+    is_interlocutor = latest_message["author"]["isInterlocutor"]
+
+    if not is_interlocutor:
+        print(f"⏭️ Własna wiadomość: {message_id}")
+        save_processed_message(message_id)
+        continue
+
+    text = latest_message.get("text", "")
 
     print("\n--------------------")
     print("🧵 ID:", thread_id)
+    print("📩 Message ID:", message_id)
     print("👤 Login:", thread["interlocutor"]["login"])
     print("💬:", text[:300])
 
@@ -168,14 +176,14 @@ for thread in threads["threads"]:
         or "wiadomość generowana automatycznie" in text.lower()
     ):
         print("⛔ Pominięto (system / zamówienie)")
-        save_processed_thread(thread_id)
+        save_processed_message(message_id)
         continue
 
     print("✅ NOWA WIADOMOŚĆ OD KLIENTA")
 
     if "#TEST" not in text:
         print("🛡️ Tryb testowy - brak znacznika #TEST")
-        save_processed_thread(thread_id)
+        save_processed_message(message_id)
         continue
 
     print("🧪 Wykryto wiadomość testową")
@@ -198,6 +206,6 @@ for thread in threads["threads"]:
     print("📤 Status odpowiedzi:", reply_response.status_code)
     print(reply_response.text)
 
-    save_processed_thread(thread_id)
+    save_processed_message(message_id)
 
 push_processed_file()
