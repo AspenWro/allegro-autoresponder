@@ -147,22 +147,26 @@ for thread in threads["threads"]:
     if not messages["messages"]:
         continue
 
-    latest_message = messages["messages"][0]
+    latest_client_message = None
 
-    message_id = latest_message["id"]
+    for message in messages["messages"]:
+        author = message.get("author", {})
+
+        if author.get("isInterlocutor") is True:
+            latest_client_message = message
+            break
+
+    if latest_client_message is None:
+        print(f"⏭️ Brak wiadomości klienta: {thread_id}")
+        continue
+
+    message_id = latest_client_message["id"]
 
     if message_id in processed_messages:
         print(f"⏭️ Wiadomość już obsłużona: {message_id}")
         continue
 
-    is_interlocutor = latest_message["author"]["isInterlocutor"]
-
-    if not is_interlocutor:
-        print(f"⏭️ Własna wiadomość: {message_id}")
-        save_processed_message(message_id)
-        continue
-
-    text = latest_message.get("text", "")
+    text = latest_client_message.get("text", "")
 
     print("\n--------------------")
     print("🧵 ID:", thread_id)
