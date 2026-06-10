@@ -151,6 +151,8 @@ for thread in threads["threads"]:
     if not messages["messages"]:
         continue
 
+    print(messages["messages"][-1])
+    
     last_message = messages["messages"][-1]
 
     text = last_message.get("text", "")
