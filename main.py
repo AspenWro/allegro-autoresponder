@@ -105,9 +105,9 @@ def load_answered_threads():
         return set(line.strip() for line in f.readlines())
 
 
-def save_answered_thread(thread_id, weekend_key):
+def save_answered_thread(thread_key):
     with open(ANSWERED_FILE, "a") as f:
-        f.write(f"{thread_id}|{weekend_key}\n")
+        f.write(thread_key + "\n")
 
 
 def push_answered_file():
@@ -147,7 +147,7 @@ if not is_weekend_mode():
 
 weekend_key = get_weekend_key()
 
-print(f"📅 Weekend: {weekend_key}")
+print(f"📅 Weekend key: {weekend_key}")
 
 access_token = get_access_token()
 
@@ -179,6 +179,7 @@ for thread in threads["threads"]:
     weekend_thread_key = f"{thread_id}|{weekend_key}"
 
     if weekend_thread_key in answered_threads:
+        print(f"⏭️ Już odpowiedziano w ten weekend: {thread_id}")
         continue
 
     messages_response = requests.get(
@@ -215,9 +216,13 @@ for thread in threads["threads"]:
     ):
         continue
 
+    if "#TEST" not in text:
+        continue
+
     print("\n--------------------")
     print("🧵 ID:", thread_id)
     print("👤 Login:", thread["interlocutor"]["login"])
+    print("🧪 Wykryto wiadomość testową")
     print("📤 Wysyłam autoresponder weekendowy")
 
     reply_url = f"https://api.allegro.pl/messaging/threads/{thread_id}/messages"
@@ -238,7 +243,8 @@ for thread in threads["threads"]:
     print("📤 Status odpowiedzi:", reply_response.status_code)
 
     if reply_response.status_code == 201:
-        save_answered_thread(thread_id, weekend_key)
+        save_answered_thread(weekend_thread_key)
+        print("✅ Zapisano odpowiedź weekendową")
     else:
         print(reply_response.text)
 
