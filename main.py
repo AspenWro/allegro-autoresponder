@@ -1,6 +1,7 @@
 import requests
 import os
 from github import Github
+from datetime import datetime
 
 CLIENT_ID = os.environ["CLIENT_ID"]
 CLIENT_SECRET = os.environ["CLIENT_SECRET"]
@@ -9,7 +10,41 @@ REFRESH_TOKEN = os.environ["REFRESH_TOKEN"]
 GH_PAT = os.environ["GH_PAT"]
 GH_REPO = os.environ["GH_REPO"]
 
-PROCESSED_FILE = "processed_messages.txt"
+ANSWERED_FILE = "answered_threads.txt"
+
+AUTOREPLY_TEXT = """Dziękujemy za wiadomość.
+
+Obecnie kontaktujesz się z nami poza standardowymi godzinami pracy. Otrzymaliśmy Twoją wiadomość i odpowiemy tak szybko, jak to możliwe w najbliższym dniu roboczym.
+
+Pozdrawiamy
+Zespół Aspen"""
+
+
+def is_weekend_mode():
+    now = datetime.now()
+
+    weekday = now.weekday()
+    hour = now.hour
+
+    if weekday == 4 and hour >= 16:
+        return True
+
+    if weekday == 5:
+        return True
+
+    if weekday == 6:
+        return True
+
+    if weekday == 0 and hour < 8:
+        return True
+
+    return False
+
+
+def get_weekend_key():
+    now = datetime.now()
+    year, week, _ = now.isocalendar()
+    return f"{year}-W{week}"
 
 
 def get_access_token():
@@ -62,49 +97,57 @@ def update_github_secret(new_token):
         print("⚠️ Błąd aktualizacji refresh tokena:", e)
 
 
-def load_processed_messages():
-    if not os.path.exists(PROCESSED_FILE):
+def load_answered_threads():
+    if not os.path.exists(ANSWERED_FILE):
         return set()
 
-    with open(PROCESSED_FILE, "r") as f:
+    with open(ANSWERED_FILE, "r") as f:
         return set(line.strip() for line in f.readlines())
 
 
-def save_processed_message(message_id):
-    with open(PROCESSED_FILE, "a") as f:
-        f.write(message_id + "\n")
+def save_answered_thread(thread_id, weekend_key):
+    with open(ANSWERED_FILE, "a") as f:
+        f.write(f"{thread_id}|{weekend_key}\n")
 
 
-def push_processed_file():
+def push_answered_file():
     try:
         g = Github(GH_PAT)
         repo = g.get_repo(GH_REPO)
 
-        with open(PROCESSED_FILE, "r") as f:
+        with open(ANSWERED_FILE, "r") as f:
             content = f.read()
 
         try:
-            contents = repo.get_contents(PROCESSED_FILE)
+            contents = repo.get_contents(ANSWERED_FILE)
 
             repo.update_file(
-                PROCESSED_FILE,
-                "Aktualizacja processed messages",
+                ANSWERED_FILE,
+                "Aktualizacja answered threads",
                 content,
                 contents.sha
             )
 
         except Exception:
             repo.create_file(
-                PROCESSED_FILE,
-                "Dodanie processed messages",
+                ANSWERED_FILE,
+                "Dodanie answered threads",
                 content
             )
 
-        print("✅ processed_messages.txt zapisany do GitHub")
+        print("✅ answered_threads.txt zapisany do GitHub")
 
     except Exception as e:
-        print("⚠️ Błąd zapisu processed_messages:", e)
+        print("⚠️ Błąd zapisu answered_threads:", e)
 
+
+if not is_weekend_mode():
+    print("⏭️ Poza godzinami działania autorespondera")
+    raise SystemExit(0)
+
+weekend_key = get_weekend_key()
+
+print(f"📅 Weekend: {weekend_key}")
 
 access_token = get_access_token()
 
@@ -125,13 +168,18 @@ if "threads" not in threads:
     print(threads)
     raise Exception("Brak pola threads w odpowiedzi API")
 
-processed_messages = load_processed_messages()
+answered_threads = load_answered_threads()
 
 print(f"📨 Pobrano rozmowy: {len(threads['threads'])}")
 
 for thread in threads["threads"]:
 
     thread_id = thread["id"]
+
+    weekend_thread_key = f"{thread_id}|{weekend_key}"
+
+    if weekend_thread_key in answered_threads:
+        continue
 
     messages_response = requests.get(
         f"https://api.allegro.pl/messaging/threads/{thread_id}/messages",
@@ -141,7 +189,6 @@ for thread in threads["threads"]:
     messages = messages_response.json()
 
     if "messages" not in messages:
-        print(f"⚠️ Brak wiadomości dla wątku {thread_id}")
         continue
 
     if not messages["messages"]:
@@ -157,40 +204,21 @@ for thread in threads["threads"]:
             break
 
     if latest_client_message is None:
-        print(f"⏭️ Brak wiadomości klienta: {thread_id}")
-        continue
-
-    message_id = latest_client_message["id"]
-
-    if message_id in processed_messages:
-        print(f"⏭️ Wiadomość już obsłużona: {message_id}")
         continue
 
     text = latest_client_message.get("text", "")
-
-    print("\n--------------------")
-    print("🧵 ID:", thread_id)
-    print("📩 Message ID:", message_id)
-    print("👤 Login:", thread["interlocutor"]["login"])
-    print("💬:", text[:300])
 
     if (
         "zamówienie" in text.lower()
         or "dziękujemy za złożenie zamówienia" in text.lower()
         or "wiadomość generowana automatycznie" in text.lower()
     ):
-        print("⛔ Pominięto (system / zamówienie)")
-        save_processed_message(message_id)
         continue
 
-    print("✅ NOWA WIADOMOŚĆ OD KLIENTA")
-
-    if "#TEST" not in text:
-        print("🛡️ Tryb testowy - brak znacznika #TEST")
-        save_processed_message(message_id)
-        continue
-
-    print("🧪 Wykryto wiadomość testową")
+    print("\n--------------------")
+    print("🧵 ID:", thread_id)
+    print("👤 Login:", thread["interlocutor"]["login"])
+    print("📤 Wysyłam autoresponder weekendowy")
 
     reply_url = f"https://api.allegro.pl/messaging/threads/{thread_id}/messages"
 
@@ -202,14 +230,16 @@ for thread in threads["threads"]:
             "Content-Type": "application/vnd.allegro.public.v1+json"
         },
         json={
-            "text": "To jest odpowiedź testowa autorespondera Aspen.",
+            "text": AUTOREPLY_TEXT,
             "attachments": []
         }
     )
 
     print("📤 Status odpowiedzi:", reply_response.status_code)
-    print(reply_response.text)
 
-    save_processed_message(message_id)
+    if reply_response.status_code == 201:
+        save_answered_thread(thread_id, weekend_key)
+    else:
+        print(reply_response.text)
 
-push_processed_file()
+push_answered_file()
