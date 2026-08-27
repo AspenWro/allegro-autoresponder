@@ -1,7 +1,7 @@
 import requests
 import os
 from github import Github
-from datetime import datetime
+from datetime import datetime, timezone
 
 CLIENT_ID = os.environ["CLIENT_ID"]
 CLIENT_SECRET = os.environ["CLIENT_SECRET"]
@@ -141,6 +141,20 @@ def push_answered_file():
         print("⚠️ Błąd zapisu answered_threads:", e)
 
 
+def parse_message_time(message):
+    created_at = message.get("createdAt")
+
+    if not created_at:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    try:
+        return datetime.fromisoformat(
+            created_at.replace("Z", "+00:00")
+        )
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
 if not is_weekend_mode():
     print("⏭️ Poza godzinami działania autorespondera")
     raise SystemExit(0)
@@ -190,14 +204,23 @@ for thread in threads["threads"]:
     messages = messages_response.json()
 
     if "messages" not in messages:
+        print(f"⚠️ Brak wiadomości dla wątku: {thread_id}")
         continue
 
     if not messages["messages"]:
         continue
 
+    all_messages = messages["messages"]
+
+    all_messages_sorted = sorted(
+        all_messages,
+        key=parse_message_time,
+        reverse=True
+    )
+
     latest_client_message = None
 
-    for message in messages["messages"]:
+    for message in all_messages_sorted:
         author = message.get("author", {})
 
         if author.get("isInterlocutor") is True:
@@ -205,6 +228,31 @@ for thread in threads["threads"]:
             break
 
     if latest_client_message is None:
+        print(f"⏭️ Brak wiadomości klienta: {thread_id}")
+        continue
+
+    client_message_time = parse_message_time(latest_client_message)
+
+    message_after_client = None
+
+    for message in all_messages_sorted:
+        message_time = parse_message_time(message)
+
+        if message_time <= client_message_time:
+            continue
+
+        author = message.get("author", {})
+
+        if author.get("isInterlocutor") is False:
+            if message.get("type") == "MESSAGE_CENTER":
+                message_after_client = message
+                break
+
+    if message_after_client is not None:
+        print(
+            f"⏭️ Sprzedawca już odpowiedział po wiadomości klienta: "
+            f"{thread_id}"
+        )
         continue
 
     text = latest_client_message.get("text", "")
@@ -214,14 +262,20 @@ for thread in threads["threads"]:
         or "dziękujemy za złożenie zamówienia" in text.lower()
         or "wiadomość generowana automatycznie" in text.lower()
     ):
-        continue
-
-    if "#TEST" not in text:
+        print(f"⛔ Pominięto (system / zamówienie): {thread_id}")
         continue
 
     print("\n--------------------")
     print("🧵 ID:", thread_id)
     print("👤 Login:", thread["interlocutor"]["login"])
+    print("📩 Message ID:", latest_client_message["id"])
+    print("🕒 Czas wiadomości:", latest_client_message.get("createdAt"))
+    print("💬:", text[:300])
+
+    if "#TEST" not in text:
+        print("🛡️ Tryb testowy - brak znacznika #TEST")
+        continue
+
     print("🧪 Wykryto wiadomość testową")
     print("📤 Wysyłam autoresponder weekendowy")
 
