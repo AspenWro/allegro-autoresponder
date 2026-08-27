@@ -271,12 +271,7 @@ for thread in threads["threads"]:
     print("📩 Message ID:", latest_client_message["id"])
     print("🕒 Czas wiadomości:", latest_client_message.get("createdAt"))
     print("💬:", text[:300])
-
-    if "#TEST" not in text:
-        print("🛡️ Tryb testowy - brak znacznika #TEST")
-        continue
-
-    print("🧪 Wykryto wiadomość testową")
+    print("✅ NOWA WIADOMOŚĆ OD KLIENTA")
     print("📤 Wysyłam autoresponder weekendowy")
 
     reply_url = f"https://api.allegro.pl/messaging/threads/{thread_id}/messages"
